@@ -3,6 +3,8 @@ import scipy.linalg as la
 from tqdm import tqdm
 import jax
 import jax.numpy as jnp
+from jax.lax.linalg import tridiagonal_solve
+from jax.scipy.interpolate import RegularGridInterpolator
 
 
 #-----------------Spline Stuff------------------------------------------------------------------------
@@ -125,7 +127,7 @@ def num_grid(C0, D, k, L, tf, Nx=500, Nt=500):
 
     return C
 
-def num_uptake(C0, D, k, L, times, Nx=500, Nt=500, mode='fast'):
+def num_uptake(C0, D, k, L, times, Nx=500, Nt=500, mode='fast', reaction_mode='implicit'):
     '''
     Uses Crank-Nicolson propagation to find concentration profile at a set of final times. 
     Manually recalculates for a series of final times.
@@ -145,13 +147,13 @@ def num_uptake(C0, D, k, L, times, Nx=500, Nt=500, mode='fast'):
 
     dx = L/Nx # x_0 = 0, x_1 = dx, x_2 = 2*dx, ..., x_i = i*dx, x_Nx = Nx*dx = L
 
-    xgrid = np.linspace(0, L, Nx+1)
+    xgrid = jnp.linspace(0, L, Nx+1)
     Di = D(xgrid) # Discretizes D(x) to a vector of Nx+1 elements
 
     uptakes = []
     
     if mode == 'fast':
-        times_needed = times[-1]
+        times_needed = [max(times)]
     elif mode == 'accurate':
         times_needed = times
     else:
@@ -169,42 +171,101 @@ def num_uptake(C0, D, k, L, times, Nx=500, Nt=500, mode='fast'):
         if k != 0 and dt > 2/k:
             tqdm.write(f"Warning: dt={dt:.5f} outside of stability conditions! (Nt={Nt}, k={k})")     
 
-        A_bands = np.zeros((3,Nx+1))
-        A_bands[0,1:] = -r_ab # Upper Diagonal: -r_alpha[0], -r_alpha[1], -r_alpha[2], ..., -r_alpha[Nx]
-        A_bands[1,1:-1] = (1+r_ab[1:]+r_ab[:-1]) # Main Diagonal[i]: 1 + r_alpha[i] + r_alpha[i-1] = 1 + r_alpha[i] + r_beta[i]
-        A_bands[1,0] = 1+2*r_ab[0] # Main diagonal endpoints (double r for conservation via ghost points)
-        A_bands[1,-1] = 1+2*r_ab[-1]
-        A_bands[2,:-1] = -r_ab # Lower Diagonal
 
-        B_bands = np.zeros((3,Nx+1))
-        B_bands[0,1:] = r_ab
-        B_bands[1,1:-1] = (1-r_ab[1:]-r_ab[:-1])
-        B_bands[1,0] = 1-2*r_ab[0]
-        B_bands[1,-1] = 1-2*r_ab[-1]
-        B_bands[2,:-1] = r_ab
+        # Create banded matrices for jnp.lax.linalg.tridiagonal_solve
+        # Format: first element of lower diag = 0
+        # Format: last element of upper diag  = 0
 
-        B = np.diag(B_bands[1,:]) + np.diag(B_bands[0,1:], k=+1) + np.diag(B_bands[2,:-1], k=-1)
+        # Lower Diagonal: Identical to upper diagonal
+        A_lower = jnp.concatenate([
+            jnp.array([0]), 
+            -r_ab
+        ]) 
+        # Main Diagonal[i] = 1 + r_alpha[i] + r_alpha[i-1] = 1 + r_alpha[i] + r_beta[i]
+        # Main Diagonal: 1+2r_alpha[0], ...,  1 + r_alpha[i] + r_beta[i], ..., 1+2r_alpha[Nx]
+        A_main  = jnp.concatenate([
+            jnp.array([1+2*r_ab[0]]), 
+            1+r_ab[1:]+r_ab[:-1], 
+            jnp.array([1+2*r_ab[-1]])
+        ])
+        # Upper Diagonal: -r_alpha[0], -r_alpha[1], -r_alpha[2], ..., -r_alpha[Nx]
+        A_upper = jnp.concatenate([
+            -r_ab,
+            jnp.array([0])
+        ]) 
+        # B: Reverse signs from A
+        B_lower = jnp.concatenate([
+            jnp.array([0]),
+            r_ab
+        ])
+        B_main = jnp.concatenate([
+            jnp.array([1-2*r_ab[0]]),
+            1-r_ab[1:]-r_ab[:-1],
+            jnp.array([1-2*r_ab[-1]])
+        ])
+        B_upper = jnp.concatenate([
+            r_ab,
+            jnp.array([0])
+        ])
 
         # Lext/top Dirichlet boundary condition:
         # Set first row as identity
-        A_bands[0,1] = 0
-        A_bands[1,0] = 1
+        A_upper = A_upper.at[0].set(0)
+        A_main = A_main.at[0].set(1)
         
+        '''
         # Right/bottom Neumann boundary condition:
         # Double Endpoints value
         rN = r_ab[-1] # r_beta[Nx]
         A_bands[2,-2] = -2*rN # A[Nx, Nx-1] (A_bands[2,-1] is nonsense due to banded matrix format)
         B[-1,-2] = 2*rN
+        '''
 
+        # Implicit Reaction:
+        if reaction_mode == 'implicit':
+            A_main += dt*k/2
+            B_main -= dt*k/2
 
-        C = np.zeros(Nt+1) # Manually rewrites Ci(t) for each x_i from 0 to x_Nx.
-        C[0] = C0 # Enforce Dirichlet BC at top
-
+        # Initialize
+        C = jnp.zeros(Nx+1) # Manually rewrites Ci(t) for each x_i from 0 to x_Nx.
+        # Enforce Dirichlet BC at top
+        C = C.at[0].set(C0) 
+        if mode == 'fast':
+            C_grid = jnp.zeros((Nt+1, Nx+1))
+            C_grid = C_grid.at[0,:].set(C)
+        
         for n in range(Nt):
-            RHS = B@C - dt*k*C
-            RHS[0] = C0
-            C = la.solve_banded((1,1), A_bands, RHS) # (1,1) denotes A has 1 diagonal row above main diag, 1 below.
+            # Efficient B@C
+            RHS = (
+                B_main*C +
+                B_lower*jnp.roll(C, 1) +
+                B_upper*jnp.roll(C, -1)
+            )
+            # Correct for reaction term k
+            if reaction_mode == 'explicit':
+                RHS -= dt*k*C
+            # Enforce Dirichlet BC
+            RHS = RHS.at[0].set(C0)
+            # Convert to column vector for jax
+            RHS_rank2 = RHS[:, None]
+            # Set the solution to C[n+1], increment n and repeat 
+            C = tridiagonal_solve(A_lower, A_main, A_upper, RHS_rank2)
+            C = C.flatten()  # Convert back to 1D array
 
-        uptakes.append( np.sum(C*dx) ) # [ng/cm^2]
+            if mode == 'fast':
+                C_grid = C_grid.at[n+1].set(C)
+
+        if mode == 'accurate':
+            uptakes.append( np.sum(C*dx) ) # [ng/cm^2]
+        elif mode == 'fast':
+            tgrid = jnp.linspace(0, tf, Nt+1)
+            interpolate = RegularGridInterpolator(
+                points=(tgrid, xgrid),
+                values=C_grid,
+                method='linear'
+            )
+            for t in times:
+                C = interpolate((t, xgrid))
+                uptakes.append( np.sum(C*dx) )
 
     return uptakes

@@ -238,39 +238,42 @@ input_box.pack(fill='x', pady=5)
 
 # C0 [ng/cm^3]
 C0_value = tk.DoubleVar(value=1e9) # Density of water
+# Right label (units)
+C0_unit = ttk.Label(input_box, text="ng/cm³")
+C0_unit.grid(row=0, column=2, padx=5)
 # Left label (variable name)
 C0_label = ttk.Label(input_box, text="C0: ")
 C0_label.grid(row=0, column=0, padx=5)
 # Entry (float)
 C0_entrybox = ttk.Entry(input_box, textvariable=C0_value, width=10, justify="right")
 C0_entrybox.grid(row=0, column=1, padx=5)
-# Right label (units)
-C0_unit = ttk.Label(input_box, text="ng/cm³")
-C0_unit.grid(row=0, column=2, padx=5)
+
 
 # L [A]
 L_value = tk.DoubleVar(value=250.0)
+# Right label (units)
+L_unit = ttk.Label(input_box, text="Å")
+L_unit.grid(row=1, column=2, padx=5)
 # Left label (variable name)
 L_label = ttk.Label(input_box, text="L: ")
 L_label.grid(row=1, column=0, padx=5)
 # Entry (float)
 L_entrybox = ttk.Entry(input_box, textvariable=L_value, width=10, justify="right")
 L_entrybox.grid(row=1, column=1, padx=5)
-# Right label (units)
-L_unit = ttk.Label(input_box, text="Å")
-L_unit.grid(row=1, column=2, padx=5)
+
 
 # tf [s]
 tf_value = tk.DoubleVar(value=2.0)
+# Right label (units)
+tf_unit = ttk.Label(input_box, text="s")
+tf_unit.grid(row=2, column=2, padx=5)
 # Left label (variable name)
 tf_label = ttk.Label(input_box, text="tf: ")
 tf_label.grid(row=2, column=0, padx=5)
 # Entry (float)
 tf_entrybox = ttk.Entry(input_box, textvariable=tf_value, width=10, justify="right")
 tf_entrybox.grid(row=2, column=1, padx=5)
-# Right label (units)
-tf_unit = ttk.Label(input_box, text="s")
-tf_unit.grid(row=2, column=2, padx=5)
+
 
 # Set bounds
 set_bounds_button = ttk.Button(input_box, text="Set Bounds", command=set_bounds)
@@ -285,6 +288,9 @@ weighting_box.pack(fill='x', pady=5)
 
 
 # Linear multiplier slider:
+# Value
+lin_power_value_label = ttk.Label(weighting_box, text=f"10^{lin_power}")
+lin_power_value_label.grid(column=2, row=0)
 # Label
 lin_power_label = ttk.Label(weighting_box, text='Order of Magnitude: ')
 lin_power_label.grid(column=0, row=0)
@@ -292,11 +298,12 @@ lin_power_label.grid(column=0, row=0)
 lin_power_slider = ttk.Scale(weighting_box, from_=-20, to=-5, orient='horizontal', command=update_D_lin_power) # from 1e-20 to 1e-5
 lin_power_slider.set(lin_power) # 1e-12
 lin_power_slider.grid(column=1, row=0)
-# Value
-lin_power_value_label = ttk.Label(weighting_box, text=f"10^{lin_power}")
-lin_power_value_label.grid(column=2, row=0)
+
 
 # Linear adjustment slider:
+# Value
+lin_weighting_value_label = ttk.Label(weighting_box, text=f"{lin_weighting:.2f} x 10^{lin_power} cm²/s")
+lin_weighting_value_label.grid(column=2, row=1)
 # Label
 lin_weighting_label = ttk.Label(weighting_box, text='Linear: ')
 lin_weighting_label.grid(column=0, row=1)
@@ -304,21 +311,21 @@ lin_weighting_label.grid(column=0, row=1)
 lin_weighting_slider = ttk.Scale(weighting_box, from_=1, to=10, orient='horizontal', command=update_D_lin_weighting) # from 1e-13 to 20e-13 aka 2e-12
 lin_weighting_slider.set(lin_weighting) # 10e-13 = 1e-12
 lin_weighting_slider.grid(column=1, row=1)
+
+
+
+# Exponential slider:
 # Value
-lin_weighting_value_label = ttk.Label(weighting_box, text=f"{lin_weighting:.2f} x 10^{lin_power} cm²/s")
-lin_weighting_value_label.grid(column=2, row=1)
-
-
-# Exponential slider
+exp_value_label = ttk.Label(weighting_box, text=f"{exp_weighting:.2f}")
+exp_value_label.grid(column=2, row=2)
+# Label
 exp_label = ttk.Label(weighting_box, text='Exponential: ')
 exp_label.grid(column=0, row=2)
-# slider
+# Slider
 exp_slider = ttk.Scale(weighting_box, from_=0, to=10, orient='horizontal', command=update_D_exp_weighting)
 exp_slider.set(exp_weighting)
 exp_slider.grid(column=1, row=2)
-# label
-exp_value_label = ttk.Label(weighting_box, text=f"{exp_weighting:.2f}")
-exp_value_label.grid(column=2, row=2)
+
 
 
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -334,6 +341,9 @@ for n in range(num_weights):
     # Create label
     slider_label = ttk.Label(weight_box, text=f"Weight {n}: ")
     slider_label.grid(column=0, row=n)
+    # Show value
+    value_label = ttk.Label(weight_box, text=f"{weights[n]:.2f}")
+    value_label.grid(column=2, row=n, padx=5)
 
     # Create Slider
     slider = ttk.Scale(
@@ -342,15 +352,16 @@ for n in range(num_weights):
         orient='horizontal', 
         command=lambda v, slider_num=n: update_D_weights(slider_num, v)
     )
-    slider.set(weights[n])
-    slider.grid(column=1, row=n)
-
-    # Show value
-    value_label = ttk.Label(weight_box, text=f"{weights[n]:.2f}")
-    value_label.grid(column=2, row=n, padx=5)
 
     # Store both slider and value label for future updates
     weight_sliders[n] = (slider, value_label)
+
+    # Initialize slider values and grid locations
+    slider.set(weights[n])
+    slider.grid(column=1, row=n)
+
+
+    
 
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
