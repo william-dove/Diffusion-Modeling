@@ -4,6 +4,8 @@ from tqdm import tqdm
 import jax
 import jax.numpy as jnp
 
+
+#-----------------Spline Stuff------------------------------------------------------------------------
 def cubic_bspline(u):
     '''  
     For each input u, computes the cubic B-spline basis function value.
@@ -44,8 +46,16 @@ def make_spline(weights, L, lin_weighting=1e-12, exp_weighting=1.0, median=0.0):
 
     return jax.jit(spline)
 
+#----------------------Numerical Solutions----------------------------------------------------------------------
+
+# All numerical soluions using JAX syntax
+
+
+
 def num_grid(C0, D, k, L, tf, Nx=500, Nt=500):
     '''
+    Numerical solution for experimental boundary conditions
+
     Uses Crank-Nicolson propagation to find concentration profile over time. 
     Allows for variable diffusion coeficient D(x).
     Includes explicit reaction term k.
@@ -115,7 +125,7 @@ def num_grid(C0, D, k, L, tf, Nx=500, Nt=500):
 
     return C
 
-def num_uptake(C0, D, k, L, times, Nx=500, Nt=500):
+def num_uptake(C0, D, k, L, times, Nx=500, Nt=500, mode='fast'):
     '''
     Uses Crank-Nicolson propagation to find concentration profile at a set of final times. 
     Manually recalculates for a series of final times.
@@ -139,8 +149,15 @@ def num_uptake(C0, D, k, L, times, Nx=500, Nt=500):
     Di = D(xgrid) # Discretizes D(x) to a vector of Nx+1 elements
 
     uptakes = []
-    #for tf in tqdm(times):
-    for tf in tqdm(times):
+    
+    if mode == 'fast':
+        times_needed = times[-1]
+    elif mode == 'accurate':
+        times_needed = times
+    else:
+        raise ValueError('Incorrect mode argument; use "fast" or "times"')
+
+    for tf in tqdm(times_needed):
 
         dt = tf/Nt # t_0 = 0, t_1 = dt, t_2 = 2*dt, ...,t_n = n*dt, t_Nt = Nt*dt = tf
         
@@ -149,8 +166,8 @@ def num_uptake(C0, D, k, L, times, Nx=500, Nt=500):
         # r_ab[0] = 1/2 * (D0+D1)*dt / 2*dx^2 = r_alpha[0] = r_beta[1]
         r_ab = 0.5*(Di[:-1] + Di[1:])*dt / (2*dx**2) # Size (Nx,) 
         
-        #if k != 0 and dt > 2/k:
-        #    tqdm.write(f"dt={dt:.5f} outside of stability conditions! (Nt={Nt}, k={k})")     
+        if k != 0 and dt > 2/k:
+            tqdm.write(f"Warning: dt={dt:.5f} outside of stability conditions! (Nt={Nt}, k={k})")     
 
         A_bands = np.zeros((3,Nx+1))
         A_bands[0,1:] = -r_ab # Upper Diagonal: -r_alpha[0], -r_alpha[1], -r_alpha[2], ..., -r_alpha[Nx]
