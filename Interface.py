@@ -16,16 +16,19 @@ import matplotlib.pyplot as plt
 
 import sys
 
-from interface_utils import make_spline, num_grid, num_uptake
+from utils import make_spline, num_grid, num_uptake
 
 #--------------------------------Initialize D(x)-----------------------------------------------------
 
 Nx = 500
 Nt = 500
+theta = 0.5
 num_weights = 10
 weights = np.random.rand(num_weights)*10
 L_A = 250 # [A]
 L_cm = L_A*1e-8 # [cm] --A is input as angstrom but converted to cm in the code.
+alpha = 0.0
+beta = 1.0
 lin_power = -12
 lin_weighting = 1.0
 lin_weighting_scaled = lin_weighting*10**lin_power
@@ -59,9 +62,12 @@ plotting_window.grid(column=1, row=0)
 # Fig 1
 D_fig = plt.figure(1)
 D_ax = D_fig.add_subplot(111)
+D_ax.set_title('D(x, t) = f(x) + αC^β [cm^2 / s]')
+D_ax.set_xlabel('x [cm]')
+D_ax.set_ylabel('f(x) [cm^2 / s]')
 D_ax.set_ylim(-0.1e-12, 1.5e-12)
 D_ax.set_xlim(0, L_cm)
-D_line, = D_ax.plot(x, f(x), linestyle='--', color='grey', label='Diffusion Coefficient D(x)')
+D_line, = D_ax.plot(x, f(x), linestyle='--', color='grey', label='Diffusion Coefficient D(x), t=0')
 
 D_canvas = FigureCanvasTkAgg(D_fig, master=plotting_window)
 D_canvas.get_tk_widget().grid(column=0, row=0)
@@ -69,6 +75,7 @@ D_canvas.get_tk_widget().grid(column=0, row=0)
 # Fig 2
 C_fig = plt.figure(2)
 C_ax = C_fig.add_subplot(111)
+C_ax.set_title('')
 C_ax.set_xlim(0, L_cm)
 
 C_canvas = FigureCanvasTkAgg(C_fig, master=plotting_window)
@@ -83,28 +90,32 @@ m_canvas.get_tk_widget().grid(column=1, row=0, rowspan=2)
 
 
 def set_bounds():
-    global D_line, C0, L, tf, lin_weighting_scaled, exp_weighting, f, x
+    global D_line, C0, L, tf, alpha, beta, Nx, Nt, theta, lin_weighting_scaled, exp_weighting, f, x
 
     C0 = float(C0_entrybox.get())
     L_A  = float(L_entrybox.get())
     tf = float(tf_entrybox.get())
+    alpha = float(alpha_entrybox.get())
+    beta = float(beta_entrybox.get())
+    Nx = int(Nx_entrybox.get())
+    Nt = int(Nt_entrybox.get())
+    theta = float(theta_entrybox.get())
 
-    if L_A <= 0 or tf <= 0 or C0 <= 0:
-        raise ValueError("L, tf, and C0 must be positive values.")
+    if L_A <= 0 or tf <= 0 or C0 <= 0 or Nx <= 0 or Nt <= 0:
+        raise ValueError("All entries must be positive values.")
     
     L_cm = L_A*1e-8
 
     f = make_spline(weights, L_cm, lin_weighting=lin_weighting_scaled, exp_weighting=exp_weighting)
     x = np.linspace(0, L_cm, Nx+1)
 
-    D_ax.cla()
-    C_ax.cla()
+
     D_ax.set_xlim(0, L_cm)
     C_ax.set_xlim(0, L_cm)
     D_ax.set_ylim(-0.1*np.max(f(x)), 1.1*np.max(f(x)))
     C_ax.set_ylim(-0.1*C0, 1.1*C0)
     
-    D_line, = D_ax.plot(x, f(x), linestyle='--', color='grey', label='Diffusion Coefficient D(x)')
+    D_line.set_data(x, f(x))
     D_canvas.draw()
 
 
@@ -154,37 +165,38 @@ def solve():
     global num_frames, C_profile, C_line, uptake_data, tracker_dot, tracker_line
 
     set_bounds() 
-    D = f
 
     print('Calculating concentration profile...')
-    C_profile = num_grid(C0, D, k=0.0, L=L_cm, tf=tf, Nx=Nx, Nt=Nt)
+    C_profile = num_grid(C0, f, k=0.0, L=L_cm, tf=tf, alpha=alpha, beta=beta, Nx=Nx, Nt=Nt, theta=theta)
 
     active_frame = 0
     num_frames = C_profile.shape[0]
 
     print('Plotting...')
+    for line in C_ax.lines: line.remove()
     C_line, = C_ax.plot(x, C_profile[active_frame,:], color='blue', label='Concentration Profile C(x,tf)')
     C_canvas.draw()
     
     print('Done!')
 
-    print('Weights: ')
-    print(weights)
+    # print('Weights: ')
+    # print(weights)
 
-    print('C[-1,:]: ')
-    print(C_profile[-1,:])
+    # print('C[-1,:]: ')
+    # print(C_profile[-1,:])
 
     # Plot uptake
     times = np.linspace(0, tf, Nt+1)
-    uptake_data = num_uptake(C0, D, k=0.0, L=L_cm, times=times, Nx=Nx, Nt=Nt)
+    uptake_data = num_uptake(C0, f, k=0.0, L=L_cm, times=times, alpha=alpha, beta=beta, Nx=Nx, Nt=Nt)
 
-    print('Uptake Data: ')
-    print(uptake_data)
+    # print('Uptake Data: ')
+    # print(uptake_data)
 
-    m_ax.cla()
+    for line in m_ax.lines: line.remove()
     m_ax.set_xlim(0, tf)
     m_ax.set_ylim(0, 1.1*np.max(uptake_data))
     m_ax.plot(times, uptake_data)
+ 
     # Create tracking dot
     tracker_dot, = m_ax.plot(
     [0], [uptake_data[0]],
@@ -263,7 +275,7 @@ L_entrybox.grid(row=1, column=1, padx=5)
 
 
 # tf [s]
-tf_value = tk.DoubleVar(value=2.0)
+tf_value = tk.DoubleVar(value=10.0)
 # Right label (units)
 tf_unit = ttk.Label(input_box, text="s")
 tf_unit.grid(row=2, column=2, padx=5)
@@ -274,10 +286,55 @@ tf_label.grid(row=2, column=0, padx=5)
 tf_entrybox = ttk.Entry(input_box, textvariable=tf_value, width=10, justify="right")
 tf_entrybox.grid(row=2, column=1, padx=5)
 
+# alpha
+alpha_value = tk.DoubleVar(value=0.0)
+# Label
+alpha_label = ttk.Label(input_box, text='alpha: ')
+alpha_label.grid(row=3, column=0, padx=5)
+# Entry (float)
+alpha_entrybox = ttk.Entry(input_box, textvariable=alpha_value, width=10, justify='right')
+alpha_entrybox.grid(row=3, column=1, padx=5)
 
-# Set bounds
+# beta
+beta_value = tk.DoubleVar(value=1.0)
+# Label
+beta_label = ttk.Label(input_box, text='beta: ')
+beta_label.grid(row=4, column=0, padx=5)
+# Entry (float)
+beta_entrybox = ttk.Entry(input_box, textvariable=beta_value, width=10, justify='right')
+beta_entrybox.grid(row=4, column=1, padx=5)
+
+# Nx
+Nx_value = tk.IntVar(value=Nx)
+# Label (variable name)
+Nx_label = ttk.Label(input_box, text='Nx: ')
+Nx_label.grid(row=0, column=4, padx=5)
+# Entry (int)
+Nx_entrybox = ttk.Entry(input_box, textvariable=Nx_value, width=10, justify='right')
+Nx_entrybox.grid(row=0, column=5)
+
+# Nt
+Nt_value = tk.IntVar(value=Nt)
+# Label (variable name)
+Nt_label = ttk.Label(input_box, text='Nt: ')
+Nt_label.grid(row=1, column=4, padx=5)
+# Entry (int)
+Nt_entrybox = ttk.Entry(input_box, textvariable=Nt_value, width=10, justify='right')
+Nt_entrybox.grid(row=1, column=5)
+
+# Theta
+theta_value = tk.DoubleVar(value=theta)
+# Label
+theta_label = ttk.Label(input_box, text='Theta: ')
+theta_label.grid(row=2, column=4, padx=5)
+# Entry (float)
+theta_entrybox = ttk.Entry(input_box, textvariable=theta_value, width=10, justify='right')
+theta_entrybox.grid(row=2, column=5)
+
+
+# Set bounds button
 set_bounds_button = ttk.Button(input_box, text="Set Bounds", command=set_bounds)
-set_bounds_button.grid(column=0, row=3, columnspan=3, pady=2)
+set_bounds_button.grid(column=0, row=5, columnspan=3, pady=2)
 
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
