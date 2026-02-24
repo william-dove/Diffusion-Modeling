@@ -139,7 +139,7 @@ def make_banded(Di, dx, dt, reaction_mode, k, theta):
     return A_lower, A_main, A_upper, B_lower, B_main, B_upper
 
 
-def num_grid(C0, f, k, L, tf, Nx=500, Nt=500, alpha=0.0, beta=1.0, theta=0.5, reaction_mode='implicit'):
+def num_grid(C0, f, k, L, tf, Nx=50, Nt=6400, alpha=0.0, beta=1.0, theta=0.55, reaction_mode='implicit'):
     '''
     Numerical solution for experimental boundary conditions
 
@@ -147,6 +147,9 @@ def num_grid(C0, f, k, L, tf, Nx=500, Nt=500, alpha=0.0, beta=1.0, theta=0.5, re
     Allows for variable diffusion coeficient D(x).
     Includes explicit reaction term k.
     Uses earlier defined experimental boundary conditions.
+
+    Default conditions should result in <5% error:
+    - theta=0.55, Nx=50, Nt=6400
 
     Optimized to work with Jax. 
     Only supports implicit reaction mode, would probably be best to keep k=0.
@@ -207,12 +210,15 @@ def num_grid(C0, f, k, L, tf, Nx=500, Nt=500, alpha=0.0, beta=1.0, theta=0.5, re
     return C_grid
 
 
-def num_uptake(C0, f, k, L, times, Nx=500, Nt=500, alpha=0, beta=1, theta=0.5, reaction_mode='implicit'):
+def num_uptake(C0, f, k, L, times, Nx=50, Nt=6400, alpha=0, beta=1, theta=0.55, reaction_mode='implicit'):
     '''
     Uses Crank-Nicolson propagation to find concentration profile at a set of final times. 
     Allows for variable diffusion coeficient D(x).
     Includes explicit reaction term k.
     Uses earlier defined experimental boundary conditions.
+
+    Default conditions should result in <5% error:
+    - theta=0.55, Nx=50, Nt=6400
 
     Optimized to work with Jax. 
     Only supports implicit reaction mode, would probably be best to keep k=0.
