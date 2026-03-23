@@ -1,3 +1,5 @@
+# utils.py for diffusion project.
+
 import numpy as np
 from tqdm import tqdm
 import jax
@@ -365,7 +367,7 @@ def accurate_num_uptake(C0, f, k, L, times, Nx=500, Nt=500, alpha=0, beta=1, the
 
 #-------------------Analytic Solutions-----------------------------------
 
-def an_grid(C0, D, L, tf, Nx=500, Nt=500, M=50):
+def an_grid(C0, D, L, tf, Nx=50, Nt=6400, M=50):
     '''
     Computes the analytic solution to the diffusion equation for the given boundary and initial conditions.
     Returns solution as an array of format C[t, x] and size (Nt+1, Nx+1).
@@ -428,6 +430,17 @@ def an_uptake(C0, D, L, times, Nx=500, M=500):
 
     return uptakes
 
+def fast_an_uptake(C0, D, L, times, Nx=50, Nt = 6400, M=50):
+    tf = jnp.max(times)
+    dt = tf/Nt
+    dx = L/Nx
+    C = an_grid(C0, D, L, tf, Nx, Nt, M)
+    uptakes = jnp.sum(C*dx, axis=1)
+    # Interpolate the concentration profile data to the given times.
+    tgrid = jnp.linspace(dt, tf, Nt) # tgrid = [1dt, 2dt, 3dt, ..., Nt*dt=tf]
+    uptakes = jnp.interp(times, tgrid, uptakes)
+
+    return uptakes
 
 def C_uptake(C, L=1, tf=1):
     '''
