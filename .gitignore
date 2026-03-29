@@ -1,0 +1,56 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# =========================
+# Data files (ignore these)
+# =========================
+*.csv
+*.xlsx
+*.xls
+*.pptx
+*.ppt
+*.parquet
+*.json
+*.tsv
+
+# Optional: if you have a data folder, ignore everything in it
+data/
+datasets/
+raw_data/
+processed_data/
+
+# =========================
+# OS / system files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDEs / editors
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
